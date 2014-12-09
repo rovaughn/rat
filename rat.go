@@ -37,6 +37,43 @@ func (a *Rat) String() string {
 	return buf.String()
 }
 
+func (a *Rat) Marshal() []byte {
+	var b []byte
+
+	if len(a.mantissa) <= 0x10 {
+		b = make([]byte, 1+len(a.mantissa))
+		b[0] = uint8(a.radix) | uint8(a.quote)<<4
+		copy(b[1:], a.mantissa)
+	} else if len(a.mantissa) <= 0x100 {
+		b = make([]byte, 2+len(a.mantissa))
+		b[0] = uint8(a.radix)
+		b[1] = uint8(a.quote)
+		copy(b[2:], a.mantissa)
+	} else if len(a.mantissa) <= 0x10000 {
+		b = make([]byte, 4+len(a.mantissa))
+		binary.LittleEndian.PutUint16(b[0:2], uint16(a.radix))
+		binary.LittleEndian.PutUint16(b[2:4], uint16(a.quote))
+		copy(b[4:], a.mantissa)
+	} else if len(a.mantissa) <= 0x100000000 {
+		b = make([]byte, 8+len(a.mantissa))
+		binary.LittleEndian.PutUint32(b[0:4], uint32(a.radix))
+		binary.LittleEndian.PutUint32(b[4:8], uint32(a.quote))
+		copy(b[8:], a.mantissa)
+	} else {
+		b = make([]byte, 16+len(a.mantissa))
+		binary.LittleEndian.PutUint64(b[0:8], uint64(a.radix))
+		binary.LittleEndian.PutUint64(b[8:16], uint64(a.quote))
+		copy(b[16:], a.mantissa)
+	}
+
+	last := len(a.mantissa) - 1
+	if a.quote == last && a.mantissa[last] == 0 {
+		b = b[:len(b)-1]
+	}
+
+	return b
+}
+
 type sumState struct {
 	carry   uint8
 	cursor1 int
