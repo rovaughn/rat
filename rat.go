@@ -97,6 +97,104 @@ func (a *Rat) Add(b *Rat) *Rat {
 	}
 }
 
+func (a *Rat) RShift() *Rat {
+	if a.quote == 0 {
+		m := make([]uint8, 2*len(a.mantissa)-1)
+		copy(m, a.mantissa[1:])
+		copy(m[len(a.mantissa)-1:], a.mantissa)
+		return &Rat{
+			mantissa: m,
+			radix:    a.radix,
+			quote:    0,
+		}
+	} else {
+		m := make([]uint8, len(a.mantissa)-1)
+		copy(m, a.mantissa[1:])
+		return &Rat{
+			mantissa: m,
+			radix:    a.radix,
+			quote:    a.quote - 1,
+		}
+	}
+}
+
+func (a *Rat) Mul(b *Rat) *Rat {
+	type mulstate struct {
+		cursor1, cursor2 int
+		carry            *Rat
+	}
+
+	outerTable := make([]mulstate, 0)
+	outerMantissa := make([]uint8, 0)
+	outerState := mulstate{0, 0, Uint8(0)}
+
+	for {
+	nextOuterLoop:
+		for i := range outerTable {
+			if outerTable[i].cursor1 == outerState.cursor1 && outerTable[i].cursor2 == outerState.cursor2 && outerTable[i].carry.Eq(outerState.carry) {
+				return &Rat{
+					mantissa: outerMantissa,
+					quote:    i,
+					radix:    a.radix + b.radix,
+				}
+			}
+		}
+
+		outerTable = append(outerTable, outerState)
+
+		firstSum := Uint(uint64(a.mantissa[outerState.cursor1]) * uint64(b.mantissa[outerState.cursor2])).Add(outerState.carry)
+
+		outerMantissa = append(outerMantissa, firstSum.mantissa[0])
+
+		innerState := mulstate{outerState.cursor1, 1, firstSum.RShift()}
+		innerTable := make([]mulstate, 0)
+		outerCarry := make([]uint8, 0)
+
+		for {
+			for i := range innerTable {
+				if innerTable[i].cursor1 == innerState.cursor1 && innerTable[i].cursor2 == innerState.cursor2 && innerTable[i].carry.Eq(innerState.carry) {
+					outerState.cursor1++
+					if outerState.cursor1 == len(a.mantissa) {
+						outerState.cursor1 = a.quote
+					}
+
+					outerState.cursor2 = 0
+					outerState.carry = &Rat{
+						mantissa: outerCarry,
+						quote:    i,
+					}
+
+					goto nextOuterLoop
+				}
+			}
+
+			innerTable = append(innerTable, innerState)
+
+			product := Uint(uint64(a.mantissa[innerState.cursor1]) * uint64(b.mantissa[innerState.cursor2])).Add(innerState.carry)
+
+			outerCarry = append(outerCarry, product.mantissa[0])
+			innerState.carry = product.RShift()
+			innerState.cursor2++
+			if innerState.cursor2 == len(b.mantissa) {
+				innerState.cursor2 = b.quote
+			}
+		}
+	}
+}
+
+func Uint8(n uint8) *Rat {
+	if n == 0 {
+		return &Rat{
+			mantissa: []uint8{0},
+		}
+	} else {
+		return &Rat{
+			mantissa: []uint8{n, 0},
+			quote:    1,
+		}
+	}
+}
+
 func Uint(n uint64) *Rat {
 	c := &Rat{
 		mantissa: make([]uint8, 9),
@@ -109,10 +207,12 @@ func Uint(n uint64) *Rat {
 		if c.mantissa[i] != 0 {
 			c.quote = i + 1
 			c.mantissa = c.mantissa[0 : i+2]
-			break
+			return c
 		}
 	}
 
+	c.mantissa = c.mantissa[0:1]
+	c.quote = 0
 	return c
 }
 
