@@ -64,7 +64,6 @@ func TestMul(t *testing.T) {
 	for _, test := range mulTests {
 		actual1 := test.given1.Mul(test.given2)
 		actual2 := test.given2.Mul(test.given1)
-
 		if !actual1.Eq(test.expect) {
 			t.Errorf("Expected %s * %s = %s, got %s", test.given1, test.given2, test.expect, actual1)
 		}
@@ -84,6 +83,8 @@ func TestMarshal(t *testing.T) {
 		{100, 1, []byte{16, 100}},
 		{-5, 1, []byte{16, 251, 255}},
 		{10000, 1, []byte{32, 16, 39}},
+		{100, 3, []byte{16, 100}},
+		{3000, 32, []byte{32, 184, 11}},
 	}
 
 	for _, test := range marshalTests {
@@ -99,5 +100,56 @@ func TestMarshal(t *testing.T) {
 		}
 
 		t.Logf("%d/%d: %d vs %d", test.numerator, test.denominator, len(actual), len(gobbed))
+	}
+}
+
+func TestRShift(t *testing.T) {
+	rshiftTests := []struct {
+		given, expected *Rat
+	}{
+		{Int(1000), Int(3)},
+		{Int(3), Int(0)},
+		{Int(-1000), Int(-4)},
+	}
+
+	for _, test := range rshiftTests {
+		actual := test.given.RShift()
+
+		if !actual.Eq(test.expected) {
+			t.Errorf("Expected %s >> 1 = %s, got %s", test.given, test.expected, actual)
+		}
+	}
+}
+
+func TestDiv(t *testing.T) {
+	divTests := []struct {
+		dividend, divisor *Rat
+	}{
+		{Int(384), Int(256)},
+		{Int(-3), Int(-2)},
+		{Int(5), Int(5)},
+		{Int(5), Int(3)},
+		{Int(-5), Int(3)},
+		{Int(-3), Int(-2)},
+		{Int(10), Int(-32)},
+	}
+
+	for _, test := range divTests {
+		quotient := test.dividend.Div(test.divisor)
+
+		quotient2 := test.dividend.Negate().Div(test.divisor.Negate())
+		if !quotient.Eq(quotient2) {
+			t.Errorf("Expected %s / %s = %s = %s / %s = %s", test.dividend, test.divisor, quotient, test.dividend.Negate(), test.divisor.Negate(), quotient2)
+		}
+
+		product1 := quotient.Mul(test.divisor)
+		if !product1.Eq(test.dividend) {
+			t.Errorf("Expected (%s / %s) * %s = %s * %s = %s, got %s", test.dividend, test.divisor, test.divisor, quotient, test.divisor, test.dividend, product1)
+		}
+
+		quotient3 := test.dividend.Div(quotient)
+		if !quotient3.Eq(test.divisor) {
+			t.Errorf("Expected %s / (%s / %s) = %s / %s = %s, got %s", test.dividend, test.dividend, test.divisor, test.dividend, quotient, test.divisor, quotient3)
+		}
 	}
 }

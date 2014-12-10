@@ -12,7 +12,11 @@ type Rat struct {
 	quote    int
 }
 
+var Zero = &Rat{[]byte{0}, 0, 0}
+
 func (a *Rat) Eq(b *Rat) bool {
+	a.normalize()
+	b.normalize()
 	return a.radix == b.radix && a.quote == b.quote && bytes.Equal(a.mantissa, b.mantissa)
 }
 
@@ -134,6 +138,45 @@ func (a *Rat) Add(b *Rat) *Rat {
 	}
 }
 
+func (a *Rat) normalize() {
+	for i := 0; i < a.radix && a.mantissa[i] == 0; i++ {
+		a.mantissa = a.mantissa[1:]
+		a.quote -= 1
+		a.radix -= 1
+	}
+
+	quotelen := len(a.mantissa) - a.quote
+
+	for i := a.quote - 1; i >= 0; i-- {
+		if a.mantissa[i] == a.mantissa[i+quotelen] {
+			a.quote -= 1
+			a.mantissa = a.mantissa[0 : len(a.mantissa)-1]
+		} else {
+			break
+		}
+	}
+
+	for chunklen := 1; chunklen < quotelen; chunklen++ {
+	nextChunkLen:
+		// Only iterate over factors of quotelen.
+		if quotelen%chunklen != 0 {
+			continue
+		}
+
+		nchunks := quotelen / chunklen
+		firstChunk := a.mantissa[a.quote : a.quote+chunklen]
+
+		for i := 1; i < nchunks; i++ {
+			if !bytes.Equal(firstChunk, a.mantissa[a.quote+i*chunklen:a.quote+(i+1)*chunklen]) {
+				goto nextChunkLen
+			}
+		}
+
+		a.mantissa = a.mantissa[:a.quote+chunklen]
+	}
+}
+
+// TODO: Normalized?
 func (a *Rat) RShift() *Rat {
 	if a.quote == 0 {
 		m := make([]uint8, 2*len(a.mantissa)-1)
@@ -155,6 +198,28 @@ func (a *Rat) RShift() *Rat {
 	}
 }
 
+func (a *Rat) Div256() *Rat {
+	if a.mantissa[0] == 0 && a.quote > 0 {
+		return &Rat{
+			mantissa: a.mantissa[1:],
+			radix:    a.radix,
+			quote:    a.quote - 1,
+		}
+	} else {
+		radix := a.radix + 1
+		if radix == len(a.mantissa) {
+			radix = a.quote
+		}
+
+		return &Rat{
+			mantissa: a.mantissa,
+			radix:    radix,
+			quote:    a.quote,
+		}
+	}
+}
+
+// TODO: Normalized?
 func (a *Rat) Mul(b *Rat) *Rat {
 	type mulstate struct {
 		cursor1, cursor2 int
@@ -169,11 +234,13 @@ func (a *Rat) Mul(b *Rat) *Rat {
 	nextOuterLoop:
 		for i := range outerTable {
 			if outerTable[i].cursor1 == outerState.cursor1 && outerTable[i].cursor2 == outerState.cursor2 && outerTable[i].carry.Eq(outerState.carry) {
-				return &Rat{
+				r := &Rat{
 					mantissa: outerMantissa,
 					quote:    i,
 					radix:    a.radix + b.radix,
 				}
+				r.normalize()
+				return r
 			}
 		}
 
@@ -186,6 +253,10 @@ func (a *Rat) Mul(b *Rat) *Rat {
 		innerState := mulstate{outerState.cursor1, 1, firstSum.RShift()}
 		innerTable := make([]mulstate, 0)
 		outerCarry := make([]uint8, 0)
+
+		if innerState.cursor2 == len(b.mantissa) {
+			innerState.cursor2 = b.quote
+		}
 
 		for {
 			for i := range innerTable {
@@ -211,11 +282,76 @@ func (a *Rat) Mul(b *Rat) *Rat {
 
 			outerCarry = append(outerCarry, product.mantissa[0])
 			innerState.carry = product.RShift()
+
 			innerState.cursor2++
 			if innerState.cursor2 == len(b.mantissa) {
 				innerState.cursor2 = b.quote
 			}
 		}
+	}
+}
+
+// FindMod(x, z) = y such that (x*y) mod 256 = z
+// Only valid for odd values of x.
+func FindMod(x uint8, z uint8) uint8 {
+	for y := 0; y < 256; y++ {
+		if uint8((uint16(x)*uint16(y))&0xff) == z {
+			return uint8(y)
+		}
+	}
+
+	return 0
+}
+
+// TODO: Normalized?
+func (a *Rat) Div(b *Rat) *Rat {
+	for {
+		if b.radix > 0 {
+			a = a.Mul(Uint(256))
+			b = b.Mul(Uint(256))
+		} else if b.mantissa[0] == 0 {
+			a = a.Div256()
+			b = b.Div256()
+		} else if b.mantissa[0]&1 == 0 {
+			a = a.Mul(Uint8(2))
+			b = b.Mul(Uint8(2))
+		} else {
+			break
+		}
+	}
+
+	// First question:
+	// let x = first digit of b
+	// let z = first digit of a
+	// find y such that x*y mod 256 = z
+	divisor := b
+	result := make([]uint8, 0)
+
+	type divState struct {
+		dividend *Rat
+		quotient uint8
+	}
+
+	history := make([]divState, 0)
+	dividend := a
+
+	for {
+		quotient := FindMod(divisor.mantissa[0], dividend.mantissa[0])
+
+		for i := range history {
+			if history[i].dividend.Eq(dividend) && history[i].quotient == quotient {
+				return &Rat{
+					mantissa: result,
+					quote:    i,
+					radix:    a.radix + b.radix,
+				}
+			}
+		}
+
+		history = append(history, divState{dividend, quotient})
+		result = append(result, quotient)
+
+		dividend = dividend.Sub(Uint8(quotient).Mul(divisor)).RShift()
 	}
 }
 
@@ -233,6 +369,10 @@ func Uint8(n uint8) *Rat {
 }
 
 func Uint(n uint64) *Rat {
+	if n == 0 {
+		return Zero
+	}
+
 	c := &Rat{
 		mantissa: make([]uint8, 9),
 		radix:    0,
@@ -248,9 +388,7 @@ func Uint(n uint64) *Rat {
 		}
 	}
 
-	c.mantissa = c.mantissa[0:1]
-	c.quote = 0
-	return c
+	panic("It should only be possible to get here if n is 0, but it's not.")
 }
 
 func Int(n int64) *Rat {
@@ -276,7 +414,7 @@ func (a *Rat) Complement() *Rat {
 }
 
 func (a *Rat) Negate() *Rat {
-	return a.Complement().Add(Uint(1))
+	return a.Complement().Add(Uint8(1))
 }
 
 func (a *Rat) Sub(b *Rat) *Rat {
