@@ -157,7 +157,6 @@ func (a *Rat) normalize() {
 	}
 
 	for chunklen := 1; chunklen < quotelen; chunklen++ {
-	nextChunkLen:
 		// Only iterate over factors of quotelen.
 		if quotelen%chunklen != 0 {
 			continue
@@ -166,13 +165,19 @@ func (a *Rat) normalize() {
 		nchunks := quotelen / chunklen
 		firstChunk := a.mantissa[a.quote : a.quote+chunklen]
 
+		allEqual := true
+
 		for i := 1; i < nchunks; i++ {
 			if !bytes.Equal(firstChunk, a.mantissa[a.quote+i*chunklen:a.quote+(i+1)*chunklen]) {
-				goto nextChunkLen
+				allEqual = false
+				break
 			}
 		}
 
-		a.mantissa = a.mantissa[:a.quote+chunklen]
+		if allEqual {
+			a.mantissa = a.mantissa[:a.quote+chunklen]
+			break
+		}
 	}
 }
 
