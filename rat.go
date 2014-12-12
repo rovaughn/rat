@@ -442,6 +442,10 @@ func (a *Rat) Complement() *Rat {
 	return c
 }
 
+func Ratio(n int64, d int64) *Rat {
+	return Int(n).Div(Int(d))
+}
+
 func (a *Rat) Negate() *Rat {
 	return a.Complement().Add(Uint8(1))
 }

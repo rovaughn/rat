@@ -35,8 +35,8 @@ func TestAdd(t *testing.T) {
 		{Int(-30), Int(50), Int(20)},
 		{Int(-30), Int(-50), Int(-80)},
 		{Int(0), Int(-1), Int(-1)},
-		{Int(1).Div(Int(2)), Int(1).Div(Int(2)), Int(1)},
-		{Int(1).Div(Int(2)), Int(1), Int(3).Div(Int(2))},
+		{Ratio(1, 2), Ratio(1, 2), Int(1)},
+		{Ratio(1, 2), Int(1), Ratio(3, 2)},
 	}
 
 	for _, test := range addTests {
@@ -90,7 +90,7 @@ func TestMarshal(t *testing.T) {
 	}
 
 	for _, test := range marshalTests {
-		actual := Int(test.numerator).Div(Int(test.denominator)).Marshal()
+		actual := Ratio(test.numerator, test.denominator).Marshal()
 
 		if !bytes.Equal(test.expect, actual) {
 			t.Errorf("Expected %d/%d -> %v, got %v", test.numerator, test.denominator, test.expect, actual)
@@ -101,7 +101,7 @@ func TestMarshal(t *testing.T) {
 			t.Errorf("Expected %d -> %v, got %v", test.numerator, actual, actualNumerator)
 		}
 
-		actualProduct := Int(test.numerator).Div(Int(test.denominator)).Mul(Int(test.denominator)).Marshal()
+		actualProduct := Ratio(test.numerator, test.denominator).Mul(Int(test.denominator)).Marshal()
 		if !bytes.Equal(actualNumerator, actualProduct) {
 			t.Errorf("Expected (%d/%d)*%d -> %v, got %v", test.numerator, test.denominator, test.denominator, actualNumerator, actualProduct)
 		}
