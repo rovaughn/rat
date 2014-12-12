@@ -44,6 +44,8 @@ func (a *Rat) String() string {
 func (a *Rat) Marshal() []byte {
 	var b []byte
 
+	a.normalize()
+
 	if len(a.mantissa) <= 0x10 {
 		b = make([]byte, 1+len(a.mantissa))
 		b[0] = uint8(a.radix) | uint8(a.quote)<<4
@@ -70,12 +72,41 @@ func (a *Rat) Marshal() []byte {
 		copy(b[16:], a.mantissa)
 	}
 
-	last := len(a.mantissa) - 1
-	if a.quote == last && a.mantissa[last] == 0 {
-		b = b[:len(b)-1]
-	}
-
 	return b
+}
+
+func Unmarshal(b []byte) (*Rat, error) {
+	if len(b) <= 0x11 {
+		return &Rat{
+			radix:    int(b[0] & 0x0f),
+			quote:    int((b[0] >> 4) & 0x0f),
+			mantissa: b[1:],
+		}, nil
+	} else if len(b) < 0x102 {
+		return &Rat{
+			radix:    int(b[0]),
+			quote:    int(b[1]),
+			mantissa: b[2:],
+		}, nil
+	} else if len(b) < 0x10004 {
+		return &Rat{
+			radix:    int(binary.LittleEndian.Uint16(b[0:2])),
+			quote:    int(binary.LittleEndian.Uint16(b[2:4])),
+			mantissa: b[4:],
+		}, nil
+	} else if len(b) < 0x100000008 {
+		return &Rat{
+			radix:    int(binary.LittleEndian.Uint32(b[0:4])),
+			quote:    int(binary.LittleEndian.Uint32(b[4:8])),
+			mantissa: b[8:],
+		}, nil
+	} else {
+		return &Rat{
+			radix:    int(binary.LittleEndian.Uint64(b[0:8])),
+			quote:    int(binary.LittleEndian.Uint64(b[8:16])),
+			mantissa: b[16:],
+		}, nil
+	}
 }
 
 type sumState struct {

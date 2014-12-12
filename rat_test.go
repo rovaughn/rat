@@ -2,7 +2,6 @@ package rat
 
 import (
 	"bytes"
-	"math/big"
 	"testing"
 )
 
@@ -81,37 +80,41 @@ func TestMarshal(t *testing.T) {
 		numerator, denominator int64
 		expect                 []byte
 	}{
-		{0, 1, []byte{0}},
-		{100, 1, []byte{16, 100}},
+		{0, 1, []byte{0, 0}},
+		{-1, 1, []byte{0, 255}},
+		{100, 1, []byte{16, 100, 0}},
 		{-5, 1, []byte{16, 251, 255}},
-		{10000, 1, []byte{32, 16, 39}},
+		{10000, 1, []byte{32, 16, 39, 0}},
 		{100, 3, []byte{16, 204, 170}},
-		{3000, 32, []byte{33, 192, 93}},
+		{3000, 32, []byte{33, 192, 93, 0}},
 	}
 
 	for _, test := range marshalTests {
-		actual := Ratio(test.numerator, test.denominator).Marshal()
+		ratio := Ratio(test.numerator, test.denominator)
+		actual := ratio.Marshal()
 
 		if !bytes.Equal(test.expect, actual) {
-			t.Errorf("Expected %d/%d -> %v, got %v", test.numerator, test.denominator, test.expect, actual)
+			t.Errorf("Expected %d/%d (%s) -> %x, got %x", test.numerator, test.denominator, ratio, test.expect, actual)
 		}
 
-		actualNumerator := Int(test.numerator).Marshal()
+		numerator := Int(test.numerator)
+		actualNumerator := numerator.Marshal()
 		if test.denominator == 1 && !bytes.Equal(actual, actualNumerator) {
-			t.Errorf("Expected %d -> %v, got %v", test.numerator, actual, actualNumerator)
+			t.Errorf("Expected %d (%s) -> %x, got %x", test.numerator, numerator, actual, actualNumerator)
 		}
 
-		actualProduct := Ratio(test.numerator, test.denominator).Mul(Int(test.denominator)).Marshal()
+		product := ratio.Mul(Int(test.denominator))
+		actualProduct := product.Marshal()
 		if !bytes.Equal(actualNumerator, actualProduct) {
-			t.Errorf("Expected (%d/%d)*%d -> %v, got %v", test.numerator, test.denominator, test.denominator, actualNumerator, actualProduct)
+			t.Errorf("Expected (%d/%d)*%d (%s) -> %x, got %x", test.numerator, test.denominator, test.denominator, product, actualNumerator, actualProduct)
 		}
 
-		gobbed, err := big.NewRat(test.numerator, test.denominator).GobEncode()
+		unmarshaled, err := Unmarshal(actual)
 		if err != nil {
-			t.Fatal(err)
+			t.Errorf("Error when unmarshaling: %v", err)
+		} else if !unmarshaled.Eq(ratio) {
+			t.Errorf("Unmarshaling %v -> %x -> %v", ratio, actual, unmarshaled)
 		}
-
-		t.Logf("%d/%d: %d vs %d", test.numerator, test.denominator, len(actual), len(gobbed))
 	}
 }
 
