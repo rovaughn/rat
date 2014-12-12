@@ -89,6 +89,18 @@ func (a *Rat) Add(b *Rat) *Rat {
 		a, b = b, a
 	}
 
+	// Now b.radix >= a.radix
+	if a.radix < b.radix {
+		r := b.radix - a.radix
+		m := make([]uint8, len(a.mantissa)+r)
+		copy(m[r:], a.mantissa)
+		a = &Rat{
+			mantissa: m,
+			quote:    a.quote + r,
+			radix:    a.radix + r,
+		}
+	}
+
 	states := make([]sumState, 0)
 	radixDiff := a.radix - b.radix
 
@@ -138,7 +150,7 @@ func (a *Rat) Add(b *Rat) *Rat {
 	}
 }
 
-func (a *Rat) normalize() {
+func (a *Rat) normalize() *Rat {
 	for i := 0; i < a.radix && a.mantissa[i] == 0; i++ {
 		a.mantissa = a.mantissa[1:]
 		a.quote -= 1
@@ -179,14 +191,16 @@ func (a *Rat) normalize() {
 			break
 		}
 	}
+
+	return a
 }
 
 // TODO: Normalized?
 func (a *Rat) RShift() *Rat {
 	if a.quote == 0 {
-		m := make([]uint8, 2*len(a.mantissa)-1)
-		copy(m, a.mantissa[1:])
-		copy(m[len(a.mantissa)-1:], a.mantissa)
+		m := make([]uint8, len(a.mantissa))
+		copy(m[1:], a.mantissa)
+		m[0] = a.mantissa[len(a.mantissa)-1]
 		return &Rat{
 			mantissa: m,
 			radix:    a.radix,
@@ -224,7 +238,6 @@ func (a *Rat) Div256() *Rat {
 	}
 }
 
-// TODO: Normalized?
 func (a *Rat) Mul(b *Rat) *Rat {
 	type mulstate struct {
 		cursor1, cursor2 int
@@ -239,13 +252,11 @@ func (a *Rat) Mul(b *Rat) *Rat {
 	nextOuterLoop:
 		for i := range outerTable {
 			if outerTable[i].cursor1 == outerState.cursor1 && outerTable[i].cursor2 == outerState.cursor2 && outerTable[i].carry.Eq(outerState.carry) {
-				r := &Rat{
+				return (&Rat{
 					mantissa: outerMantissa,
 					quote:    i,
 					radix:    a.radix + b.radix,
-				}
-				r.normalize()
-				return r
+				}).normalize()
 			}
 		}
 
@@ -325,6 +336,19 @@ func (a *Rat) Div(b *Rat) *Rat {
 		}
 	}
 
+	radix := a.radix + b.radix
+
+	a = &Rat{
+		mantissa: a.mantissa,
+		quote:    a.quote,
+		radix:    0,
+	}
+	b = &Rat{
+		mantissa: b.mantissa,
+		quote:    b.quote,
+		radix:    0,
+	}
+
 	// First question:
 	// let x = first digit of b
 	// let z = first digit of a
@@ -348,7 +372,7 @@ func (a *Rat) Div(b *Rat) *Rat {
 				return &Rat{
 					mantissa: result,
 					quote:    i,
-					radix:    a.radix + b.radix,
+					radix:    radix,
 				}
 			}
 		}

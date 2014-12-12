@@ -35,6 +35,8 @@ func TestAdd(t *testing.T) {
 		{Int(-30), Int(50), Int(20)},
 		{Int(-30), Int(-50), Int(-80)},
 		{Int(0), Int(-1), Int(-1)},
+		{Int(1).Div(Int(2)), Int(1).Div(Int(2)), Int(1)},
+		{Int(1).Div(Int(2)), Int(1), Int(3).Div(Int(2))},
 	}
 
 	for _, test := range addTests {
@@ -83,15 +85,25 @@ func TestMarshal(t *testing.T) {
 		{100, 1, []byte{16, 100}},
 		{-5, 1, []byte{16, 251, 255}},
 		{10000, 1, []byte{32, 16, 39}},
-		{100, 3, []byte{16, 100}},
-		{3000, 32, []byte{32, 184, 11}},
+		{100, 3, []byte{16, 204, 170}},
+		{3000, 32, []byte{33, 192, 93}},
 	}
 
 	for _, test := range marshalTests {
-		actual := Int(test.numerator).Marshal()
+		actual := Int(test.numerator).Div(Int(test.denominator)).Marshal()
 
 		if !bytes.Equal(test.expect, actual) {
 			t.Errorf("Expected %d/%d -> %v, got %v", test.numerator, test.denominator, test.expect, actual)
+		}
+
+		actualNumerator := Int(test.numerator).Marshal()
+		if test.denominator == 1 && !bytes.Equal(actual, actualNumerator) {
+			t.Errorf("Expected %d -> %v, got %v", test.numerator, actual, actualNumerator)
+		}
+
+		actualProduct := Int(test.numerator).Div(Int(test.denominator)).Mul(Int(test.denominator)).Marshal()
+		if !bytes.Equal(actualNumerator, actualProduct) {
+			t.Errorf("Expected (%d/%d)*%d -> %v, got %v", test.numerator, test.denominator, test.denominator, actualNumerator, actualProduct)
 		}
 
 		gobbed, err := big.NewRat(test.numerator, test.denominator).GobEncode()
