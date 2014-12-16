@@ -16,8 +16,6 @@ type Rat struct {
 var Zero = &Rat{[]byte{0}, 0, 0}
 
 func (a *Rat) Eq(b *Rat) bool {
-	a.normalize()
-	b.normalize()
 	return a.radix == b.radix && a.quote == b.quote && bytes.Equal(a.mantissa, b.mantissa)
 }
 
@@ -44,8 +42,6 @@ func (a *Rat) String() string {
 
 func (a *Rat) GobEncode() ([]byte, error) {
 	var b []byte
-
-	a.normalize()
 
 	if len(a.mantissa) <= 0x10 {
 		b = make([]byte, 1+len(a.mantissa))
@@ -130,12 +126,12 @@ func (a *Rat) Add(b *Rat) *Rat {
 		}
 	}
 
-	states := make([]sumState, 0)
+	states := make([]sumState, 0, len(a.mantissa)+len(b.mantissa)+1)
 	radixDiff := a.radix - b.radix
 
 	c := &Rat{
 		radix:    a.radix,
-		mantissa: make([]uint8, 0),
+		mantissa: make([]uint8, 0, len(a.mantissa)+len(b.mantissa)+1),
 	}
 
 	var cursor1 int
@@ -173,7 +169,7 @@ func (a *Rat) Add(b *Rat) *Rat {
 				state.cursor1 == cursor1 &&
 				state.cursor2 == cursor2 {
 				c.quote = i
-				return c
+				return c.normalize()
 			}
 		}
 	}
@@ -348,6 +344,17 @@ func FindMod(x uint8, z uint8) uint8 {
 	return 0
 }
 
+func makeDivStateKey(dividend *Rat, quotient uint8) string {
+	buffer := make([]byte, 1+8+8+len(dividend.mantissa))
+
+	buffer[0] = quotient
+	binary.LittleEndian.PutUint64(buffer[1:9], uint64(dividend.radix))
+	binary.LittleEndian.PutUint64(buffer[9:17], uint64(dividend.quote))
+	copy(buffer[17:], dividend.mantissa)
+
+	return string(buffer)
+}
+
 // TODO: Normalized?
 func (a *Rat) Div(b *Rat) *Rat {
 	for {
@@ -385,28 +392,22 @@ func (a *Rat) Div(b *Rat) *Rat {
 	divisor := b
 	result := make([]uint8, 0)
 
-	type divState struct {
-		dividend *Rat
-		quotient uint8
-	}
-
-	history := make([]divState, 0)
+	history := make(map[string]int)
 	dividend := a
 
 	for {
 		quotient := FindMod(divisor.mantissa[0], dividend.mantissa[0])
 
-		for i := range history {
-			if history[i].dividend.Eq(dividend) && history[i].quotient == quotient {
-				return &Rat{
-					mantissa: result,
-					quote:    i,
-					radix:    radix,
-				}
-			}
+		stateKey := makeDivStateKey(dividend, quotient)
+		if pos, exists := history[stateKey]; exists {
+			return (&Rat{
+				mantissa: result,
+				quote:    pos,
+				radix:    radix,
+			}).normalize()
 		}
+		history[stateKey] = len(result)
 
-		history = append(history, divState{dividend, quotient})
 		result = append(result, quotient)
 
 		dividend = dividend.Sub(Uint8(quotient).Mul(divisor)).RShift()

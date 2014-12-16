@@ -14,6 +14,7 @@ func TestString(t *testing.T) {
 		{Int(10), ".0a'00"},
 		{Int(-100), ".9c'ff"},
 		{Int(500), ".f401'00"},
+		{Int(0), "!00"},
 	}
 
 	for _, test := range stringTests {
@@ -99,6 +100,7 @@ func TestGob(t *testing.T) {
 		numerator, denominator int64
 		expect                 []byte
 	}{
+		{3, 5, []byte{16, 103, 102}},
 		{0, 1, []byte{0, 0}},
 		{-1, 1, []byte{0, 255}},
 		{100, 1, []byte{16, 100, 0}},
@@ -208,5 +210,14 @@ func TestDiv(t *testing.T) {
 		if !quotient3.Eq(test.divisor) {
 			t.Errorf("Expected %s / (%s / %s) = %s / %s = %s, got %s", test.dividend, test.dividend, test.divisor, test.dividend, quotient, test.divisor, quotient3)
 		}
+	}
+}
+
+func BenchmarkDiv(b *testing.B) {
+	numerator := Int(99999)
+	denominator := Int(99998)
+
+	for i := 0; i < b.N; i++ {
+		numerator.Div(denominator)
 	}
 }
