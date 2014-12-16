@@ -2,6 +2,8 @@ package rat
 
 import (
 	"bytes"
+	"fmt"
+	"math/big"
 	"testing"
 )
 
@@ -213,6 +215,33 @@ func TestDiv(t *testing.T) {
 	}
 }
 
+func TestSetRat(t *testing.T) {
+	tests := []struct {
+		numerator   int64
+		denominator int64
+	}{
+		{3, 100},
+		{3, 10},
+		{1, 2},
+		{100, 1000},
+		{-1, -3},
+	}
+
+	actual := big.NewRat(1, 1)
+
+	for _, test := range tests {
+		rat := Ratio(test.numerator, test.denominator)
+		rat.SetRat(actual)
+
+		expect := big.NewRat(test.numerator, test.denominator)
+
+		if actual.Cmp(expect) != 0 {
+			t.Errorf("Expected %d/%d to end up with %s, got %s\n",
+				test.numerator, test.denominator, expect, actual)
+		}
+	}
+}
+
 func BenchmarkDiv(b *testing.B) {
 	numerator := Int(99999)
 	denominator := Int(99998)
@@ -220,4 +249,30 @@ func BenchmarkDiv(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		numerator.Div(denominator)
 	}
+}
+
+func ExampleReadme() {
+	compare := func(numerator int64, denominator int64) {
+		gobRat, err := Ratio(numerator, denominator).GobEncode()
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		gobBigRat, err := big.NewRat(numerator, denominator).GobEncode()
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		fmt.Printf("Fraction %d/%d\n", numerator, denominator)
+		fmt.Printf("rat.Rat: (%d bytes) %x\n", len(gobRat), gobRat)
+		fmt.Printf("big.Rat: (%d bytes) %x\n", len(gobBigRat), gobBigRat)
+	}
+
+	compare(1, 3)
+	// Output:
+	// Fraction 1/3
+	// rat.Rat: (3 bytes) 10abaa
+	// big.Rat: (7 bytes) 02000000010103
 }

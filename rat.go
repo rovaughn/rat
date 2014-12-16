@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"math/big"
 )
 
 type Rat struct {
@@ -474,6 +475,45 @@ func (a *Rat) Complement() *Rat {
 
 func Ratio(n int64, d int64) *Rat {
 	return Int(n).Div(Int(d))
+}
+
+func (a *Rat) SetRat(r *big.Rat) {
+	beforeQuoteBE := make([]byte, a.quote)
+
+	for i := 0; i < a.quote; i++ {
+		beforeQuoteBE[a.quote-1-i] = a.mantissa[i]
+	}
+
+	afterQuoteBE := make([]byte, len(a.mantissa))
+
+	for i := a.quote; i < len(a.mantissa); i++ {
+		afterQuoteBE[len(a.mantissa)-a.quote-i] = a.mantissa[i]
+	}
+
+	divisorBE := make([]byte, len(a.mantissa)-a.quote)
+
+	for i := 0; i < len(divisorBE); i++ {
+		divisorBE[i] = 0xff
+	}
+
+	x := big.NewInt(0)
+	y := big.NewInt(0)
+	z := big.NewInt(0)
+
+	x.SetBytes(beforeQuoteBE)
+	y.SetBytes(afterQuoteBE)
+	z.SetBytes(divisorBE)
+
+	xr := big.NewRat(1, 1)
+	xr.SetInt(x)
+	r.SetFrac(y, z)
+	r.Sub(xr, r)
+
+	r256 := big.NewRat(256, 1)
+
+	for i := 0; i < a.radix; i++ {
+		r.Quo(r, r256)
+	}
 }
 
 func (a *Rat) Negate() *Rat {
