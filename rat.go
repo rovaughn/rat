@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 )
 
 type Rat struct {
@@ -41,7 +42,7 @@ func (a *Rat) String() string {
 	return buf.String()
 }
 
-func (a *Rat) Marshal() []byte {
+func (a *Rat) GobEncode() ([]byte, error) {
 	var b []byte
 
 	a.normalize()
@@ -72,40 +73,37 @@ func (a *Rat) Marshal() []byte {
 		copy(b[16:], a.mantissa)
 	}
 
-	return b
+	return b, nil
 }
 
-func Unmarshal(b []byte) (*Rat, error) {
-	if len(b) <= 0x11 {
-		return &Rat{
-			radix:    int(b[0] & 0x0f),
-			quote:    int((b[0] >> 4) & 0x0f),
-			mantissa: b[1:],
-		}, nil
+func (a *Rat) GobDecode(b []byte) error {
+	if len(b) <= 1 {
+		return errors.New("Gob is too short to decode")
+	} else if len(b) <= 0x11 {
+		a.radix = int(b[0] & 0x0f)
+		a.quote = int((b[0] >> 4) & 0x0f)
+		a.mantissa = b[1:]
+		return nil
 	} else if len(b) < 0x102 {
-		return &Rat{
-			radix:    int(b[0]),
-			quote:    int(b[1]),
-			mantissa: b[2:],
-		}, nil
+		a.radix = int(b[0])
+		a.quote = int(b[1])
+		a.mantissa = b[2:]
+		return nil
 	} else if len(b) < 0x10004 {
-		return &Rat{
-			radix:    int(binary.LittleEndian.Uint16(b[0:2])),
-			quote:    int(binary.LittleEndian.Uint16(b[2:4])),
-			mantissa: b[4:],
-		}, nil
+		a.radix = int(binary.LittleEndian.Uint16(b[0:2]))
+		a.quote = int(binary.LittleEndian.Uint16(b[2:4]))
+		a.mantissa = b[4:]
+		return nil
 	} else if len(b) < 0x100000008 {
-		return &Rat{
-			radix:    int(binary.LittleEndian.Uint32(b[0:4])),
-			quote:    int(binary.LittleEndian.Uint32(b[4:8])),
-			mantissa: b[8:],
-		}, nil
+		a.radix = int(binary.LittleEndian.Uint32(b[0:4]))
+		a.quote = int(binary.LittleEndian.Uint32(b[4:8]))
+		a.mantissa = b[8:]
+		return nil
 	} else {
-		return &Rat{
-			radix:    int(binary.LittleEndian.Uint64(b[0:8])),
-			quote:    int(binary.LittleEndian.Uint64(b[8:16])),
-			mantissa: b[16:],
-		}, nil
+		a.radix = int(binary.LittleEndian.Uint64(b[0:8]))
+		a.quote = int(binary.LittleEndian.Uint64(b[8:16]))
+		a.mantissa = b[16:]
+		return nil
 	}
 }
 

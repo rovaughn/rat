@@ -75,7 +75,26 @@ func TestMul(t *testing.T) {
 	}
 }
 
-func TestMarshal(t *testing.T) {
+func TestBadGobDecode(t *testing.T) {
+	tests := []struct {
+		buffer   []byte
+		expected string
+	}{
+		{[]byte{}, "Gob is too short to decode"},
+		{[]byte{0}, "Gob is too short to decode"},
+	}
+
+	for _, test := range tests {
+		r := new(Rat)
+		err := r.GobDecode(test.buffer)
+
+		if err == nil || err.Error() != test.expected {
+			t.Errorf("Expected %v, not %v", test.expected, err)
+		}
+	}
+}
+
+func TestGob(t *testing.T) {
 	marshalTests := []struct {
 		numerator, denominator int64
 		expect                 []byte
@@ -91,29 +110,52 @@ func TestMarshal(t *testing.T) {
 
 	for _, test := range marshalTests {
 		ratio := Ratio(test.numerator, test.denominator)
-		actual := ratio.Marshal()
 
-		if !bytes.Equal(test.expect, actual) {
-			t.Errorf("Expected %d/%d (%s) -> %x, got %x", test.numerator, test.denominator, ratio, test.expect, actual)
+		ratioGob, err := ratio.GobEncode()
+		if err != nil {
+			t.Error(err)
+			continue
+		}
+
+		if !bytes.Equal(test.expect, ratioGob) {
+			t.Errorf("Expected %d/%d (%s) -> %x, got %x",
+				test.numerator, test.denominator, ratio, test.expect, ratioGob)
 		}
 
 		numerator := Int(test.numerator)
-		actualNumerator := numerator.Marshal()
-		if test.denominator == 1 && !bytes.Equal(actual, actualNumerator) {
-			t.Errorf("Expected %d (%s) -> %x, got %x", test.numerator, numerator, actual, actualNumerator)
+		numeratorGob, err := numerator.GobEncode()
+		if err != nil {
+			t.Error(err)
+			continue
+		}
+
+		if test.denominator == 1 && !bytes.Equal(ratioGob, numeratorGob) {
+			t.Errorf("Expected %d (%s) -> %x, got %x",
+				test.numerator, numerator, ratioGob, numeratorGob)
 		}
 
 		product := ratio.Mul(Int(test.denominator))
-		actualProduct := product.Marshal()
-		if !bytes.Equal(actualNumerator, actualProduct) {
-			t.Errorf("Expected (%d/%d)*%d (%s) -> %x, got %x", test.numerator, test.denominator, test.denominator, product, actualNumerator, actualProduct)
+		productGob, err := product.GobEncode()
+		if err != nil {
+			t.Error(err)
+			continue
 		}
 
-		unmarshaled, err := Unmarshal(actual)
-		if err != nil {
-			t.Errorf("Error when unmarshaling: %v", err)
-		} else if !unmarshaled.Eq(ratio) {
-			t.Errorf("Unmarshaling %v -> %x -> %v", ratio, actual, unmarshaled)
+		if !bytes.Equal(numeratorGob, productGob) {
+			t.Errorf("Expected (%d/%d)*%d (%s) -> %x, got %x",
+				test.numerator, test.denominator, test.denominator, product,
+				numeratorGob, productGob)
+		}
+
+		decodedRatio := new(Rat)
+
+		if err := decodedRatio.GobDecode(ratioGob); err != nil {
+			t.Errorf("Error when decoding: %v", err)
+			continue
+		}
+
+		if !decodedRatio.Eq(ratio) {
+			t.Errorf("Unmarshaling %v -> %x -> %v", ratio, ratioGob, decodedRatio)
 		}
 	}
 }
