@@ -74,34 +74,49 @@ func (a *Rat) GobEncode() ([]byte, error) {
 }
 
 func (a *Rat) GobDecode(b []byte) error {
+	var radix int
+	var quote int
+	var mantissa []byte
+
 	if len(b) <= 1 {
 		return errors.New("Gob is too short to decode")
 	} else if len(b) <= 0x11 {
-		a.radix = int(b[0] & 0x0f)
-		a.quote = int((b[0] >> 4) & 0x0f)
-		a.mantissa = b[1:]
-		return nil
+		radix = int(b[0] & 0x0f)
+		quote = int((b[0] >> 4) & 0x0f)
+		mantissa = b[1:]
 	} else if len(b) < 0x102 {
-		a.radix = int(b[0])
-		a.quote = int(b[1])
-		a.mantissa = b[2:]
-		return nil
+		radix = int(b[0])
+		quote = int(b[1])
+		mantissa = b[2:]
 	} else if len(b) < 0x10004 {
-		a.radix = int(binary.LittleEndian.Uint16(b[0:2]))
-		a.quote = int(binary.LittleEndian.Uint16(b[2:4]))
-		a.mantissa = b[4:]
-		return nil
+		radix = int(binary.LittleEndian.Uint16(b[0:2]))
+		quote = int(binary.LittleEndian.Uint16(b[2:4]))
+		mantissa = b[4:]
 	} else if len(b) < 0x100000008 {
-		a.radix = int(binary.LittleEndian.Uint32(b[0:4]))
-		a.quote = int(binary.LittleEndian.Uint32(b[4:8]))
-		a.mantissa = b[8:]
-		return nil
+		radix = int(binary.LittleEndian.Uint32(b[0:4]))
+		quote = int(binary.LittleEndian.Uint32(b[4:8]))
+		mantissa = b[8:]
 	} else {
-		a.radix = int(binary.LittleEndian.Uint64(b[0:8]))
-		a.quote = int(binary.LittleEndian.Uint64(b[8:16]))
-		a.mantissa = b[16:]
-		return nil
+		radix = int(binary.LittleEndian.Uint64(b[0:8]))
+		quote = int(binary.LittleEndian.Uint64(b[8:16]))
+		mantissa = b[16:]
 	}
+
+	if radix >= len(mantissa) {
+		return errors.New("Radix extends beyond mantissa")
+	}
+
+	if quote >= len(mantissa) {
+		return errors.New("Quote extends beyond mantissa")
+	}
+
+	a.radix = radix
+	a.quote = quote
+	a.mantissa = make([]byte, len(mantissa))
+
+	copy(a.mantissa, mantissa)
+
+	return nil
 }
 
 type sumState struct {
@@ -487,7 +502,7 @@ func (a *Rat) SetRat(r *big.Rat) {
 	afterQuoteBE := make([]byte, len(a.mantissa))
 
 	for i := a.quote; i < len(a.mantissa); i++ {
-		afterQuoteBE[len(a.mantissa)-a.quote-i] = a.mantissa[i]
+		afterQuoteBE[len(a.mantissa)-1-i] = a.mantissa[i]
 	}
 
 	divisorBE := make([]byte, len(a.mantissa)-a.quote)
